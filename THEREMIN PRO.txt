@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Theremin Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07070f;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;color:#fff;padding:12px;gap:10px}
+h1{font-size:20px;letter-spacing:5px;color:#a78bfa;text-shadow:0 0 20px #a78bfa66}
+.sub{font-size:10px;color:#4b5563;letter-spacing:3px}
+.card{background:#111827;border-radius:16px;padding:28px 32px;border:1px solid #1f2937;text-align:center;max-width:460px}
+.card .icon{font-size:44px;margin-bottom:12px}
+.card p{color:#9ca3af;font-size:12px;line-height:2.1}
+button.primary{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:10px;padding:12px 40px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:3px;font-family:monospace;margin-top:16px;transition:transform .1s,box-shadow .1s}
+button.primary:hover{transform:scale(1.04);box-shadow:0 0 20px #7c3aed88}
+.hidden{display:none!important}
+
+#ui{position:relative}
+#canvas{display:block;border-radius:14px;max-width:100%}
+
+#pitch-ruler{position:absolute;right:6px;top:0;bottom:0;width:36px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 0;pointer-events:none}
+.ruler-note{font-size:9px;color:rgba(167,139,250,.7);text-align:right;letter-spacing:1px}
+#vol-ruler{position:absolute;left:6px;top:0;bottom:0;width:30px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 0;pointer-events:none}
+.vol-mark{font-size:8px;color:rgba(52,211,153,.6)}
+
+#hud{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));border-radius:0 0 14px 14px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center}
+.hud-group{display:flex;gap:20px}
+.hud-item{text-align:center}
+.hud-lbl{font-size:8px;color:#6b7280;letter-spacing:2px}
+.hud-val{font-size:14px;font-weight:700;color:#a78bfa}
+#note-big{font-size:28px;font-weight:700;color:#f59e0b;text-shadow:0 0 16px #f59e0b88;min-width:60px;text-align:center}
+
+/* Tracking status */
+#track-status{position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:2px;padding:4px 12px;border-radius:20px;background:rgba(0,0,0,.6);transition:all .3s}
+#track-status.found{color:#34d399;border:1px solid #34d39966}
+#track-status.lost{color:#f87171;border:1px solid #f8717166}
+
+#controls{width:100%;max-width:660px;background:#0e0e1a;border-radius:14px;border:1px solid #1f2937;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.ctrl-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ctrl-label{font-size:9px;color:#6b7280;letter-spacing:2px;min-width:56px}
+#root-btns{display:flex;gap:5px;flex-wrap:wrap}
+.root-btn{padding:5px 9px;font-size:10px;font-family:monospace;border-radius:6px;background:#1a1a2e;border:1px solid #2d2d44;color:#9ca3af;cursor:pointer;transition:all .12s;letter-spacing:1px}
+.root-btn.active{background:#7c3aed;border-color:#a78bfa;color:#fff;box-shadow:0 0 8px #7c3aed66}
+#scale-select{background:#1a1a2e;border:1px solid #2d2d44;color:#e5e7eb;font-family:monospace;font-size:11px;padding:6px 10px;border-radius:8px;cursor:pointer;max-width:240px}
+#scale-select option,#scale-select optgroup{background:#1a1a2e}
+.seg-group{display:flex;gap:4px}
+.seg-btn{padding:5px 11px;font-size:10px;font-family:monospace;border-radius:6px;background:#1a1a2e;border:1px solid #2d2d44;color:#9ca3af;cursor:pointer;transition:all .12s}
+.seg-btn.active{background:#1a3a2a;border-color:#34d399;color:#34d399;box-shadow:0 0 6px #34d39944}
+#port-slider{-webkit-appearance:none;appearance:none;width:120px;height:4px;border-radius:2px;background:#2d2d44;outline:none;cursor:pointer}
+#port-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#a78bfa;cursor:pointer}
+#port-val{font-size:10px;color:#a78bfa;min-width:30px}
+#scale-notes-display{font-size:10px;color:#4b5563;letter-spacing:1px}
+
+/* Calibration button */
+#calib-btn{padding:5px 14px;font-size:10px;font-family:monospace;border-radius:8px;background:#2d1a0a;border:1px solid #f59e0b66;color:#f59e0b;cursor:pointer;letter-spacing:1px}
+#calib-btn:hover{background:#3d2a0a}
+</style>
+</head>
+<body>
+
+<h1>THEREMIN PRO</h1>
+<p class="sub">red fingertip tracker · pitch perfect</p>
+
+<video id="video" width="640" height="420" playsinline muted style="display:none"></video>
+
+<div id="start-screen">
+  <div class="card">
+    <div class="icon">☝️</div>
+    <p>
+      Put a <span style="color:#ef4444">red marker / cap</span> on your fingertip<br/>
+      <span style="color:#a78bfa">↔ Move Horizontally</span> — pitch (left=root, right=+octave)<br/>
+      <span style="color:#34d399">↕ Move Vertically</span> — volume (top=loud, bottom=silent)<br/>
+      <span style="color:#f59e0b">Hide finger</span> — silence<br/>
+      Click <b>Recalibrate</b> anytime to re-detect your red marker
+    </p>
+    <button class="primary" id="btn-start">START THEREMIN</button>
+  </div>
+</div>
+
+<div id="loading-screen" class="hidden" style="text-align:center">
+  <div style="font-size:36px;margin-bottom:12px">⏳</div>
+  <p style="color:#6b7280">Requesting camera access…</p>
+</div>
+
+<div id="error-screen" class="hidden" style="text-align:center;max-width:380px">
+  <div style="font-size:36px;margin-bottom:10px">❌</div>
+  <p id="error-msg" style="color:#f87171;margin-bottom:16px;line-height:1.6"></p>
+  <button class="primary" id="btn-retry" style="margin-top:0">Try Again</button>
+</div>
+
+<div id="running-screen" class="hidden" style="display:flex;flex-direction:column;align-items:center;gap:10px;width:100%">
+  <div id="ui">
+    <canvas id="canvas" width="640" height="420"></canvas>
+    <div id="track-status" class="lost">● SEARCHING…</div>
+    <div id="pitch-ruler"></div>
+    <div id="vol-ruler"></div>
+    <div id="hud">
+      <div class="hud-group">
+        <div class="hud-item"><div class="hud-lbl">FREQ</div><div class="hud-val" id="hud-freq">—</div></div>
+        <div class="hud-item"><div class="hud-lbl">VOL</div><div class="hud-val" id="hud-vol">—</div></div>
+      </div>
+      <div id="note-big">—</div>
+      <div class="hud-group">
+        <div class="hud-item"><div class="hud-lbl">SCALE</div><div class="hud-val" id="hud-scale">—</div></div>
+        <div class="hud-item"><div class="hud-lbl">OCT</div><div class="hud-val" id="hud-oct">4</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <div class="ctrl-row">
+      <div class="ctrl-label">ROOT</div>
+      <div id="root-btns"></div>
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-label">SCALE</div>
+      <select id="scale-select"></select>
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-label">NOTES</div>
+      <div id="scale-notes-display">—</div>
+    </div>
+    <div class="ctrl-row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="ctrl-label">OCTAVE</div>
+        <div class="seg-group" id="oct-btns">
+          <button class="seg-btn" data-oct="2">2</button>
+          <button class="seg-btn" data-oct="3">3</button>
+          <button class="seg-btn active" data-oct="4">4</button>
+          <button class="seg-btn" data-oct="5">5</button>
+          <button class="seg-btn" data-oct="6">6</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="ctrl-label">WAVE</div>
+        <div class="seg-group">
+          <button class="seg-btn active" data-wave="sine">SINE</button>
+          <button class="seg-btn" data-wave="triangle">TRI</button>
+          <button class="seg-btn" data-wave="sawtooth">SAW</button>
+          <button class="seg-btn" data-wave="square">SQR</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="ctrl-label">GLIDE</div>
+        <input type="range" id="port-slider" min="0" max="500" value="80"/>
+        <div id="port-val">80ms</div>
+      </div>
+      <button id="calib-btn">🔴 RECALIBRATE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const W=640, H=420;
+const CHROMATIC=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const ROOTS=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const SCALES=[
+  {group:"Modes",name:"Ionian (Major)",intervals:[0,2,4,5,7,9,11]},
+  {group:"Modes",name:"Dorian",intervals:[0,2,3,5,7,9,10]},
+  {group:"Modes",name:"Phrygian",intervals:[0,1,3,5,7,8,10]},
+  {group:"Modes",name:"Lydian",intervals:[0,2,4,6,7,9,11]},
+  {group:"Modes",name:"Mixolydian",intervals:[0,2,4,5,7,9,10]},
+  {group:"Modes",name:"Aeolian (Nat. Minor)",intervals:[0,2,3,5,7,8,10]},
+  {group:"Modes",name:"Locrian",intervals:[0,1,3,5,6,8,10]},
+  {group:"Pentatonic",name:"Major Pentatonic",intervals:[0,2,4,7,9]},
+  {group:"Pentatonic",name:"Minor Pentatonic",intervals:[0,3,5,7,10]},
+  {group:"Pentatonic",name:"Blues",intervals:[0,3,5,6,7,10]},
+  {group:"Pentatonic",name:"Hirajoshi",intervals:[0,2,3,7,8]},
+  {group:"Pentatonic",name:"Insen",intervals:[0,1,5,7,10]},
+  {group:"Minor Variants",name:"Harmonic Minor",intervals:[0,2,3,5,7,8,11]},
+  {group:"Minor Variants",name:"Melodic Minor",intervals:[0,2,3,5,7,9,11]},
+  {group:"Minor Variants",name:"Phrygian Dominant",intervals:[0,1,4,5,7,8,10]},
+  {group:"Minor Variants",name:"Hungarian Minor",intervals:[0,2,3,6,7,8,11]},
+  {group:"Symmetric",name:"Whole Tone",intervals:[0,2,4,6,8,10]},
+  {group:"Symmetric",name:"Diminished (HW)",intervals:[0,1,3,4,6,7,9,10]},
+  {group:"Symmetric",name:"Diminished (WH)",intervals:[0,2,3,5,6,8,9,11]},
+  {group:"Symmetric",name:"Augmented",intervals:[0,3,4,7,8,11]},
+  {group:"Symmetric",name:"Chromatic",intervals:[0,1,2,3,4,5,6,7,8,9,10,11]},
+  {group:"World",name:"Byzantine",intervals:[0,1,4,5,7,8,11]},
+  {group:"World",name:"Persian",intervals:[0,1,4,5,6,8,11]},
+  {group:"World",name:"Arabic (Hijaz)",intervals:[0,2,3,6,7,8,10]},
+  {group:"World",name:"Japanese Yo",intervals:[0,2,5,7,9]},
+  {group:"World",name:"Balinese Pelog",intervals:[0,1,3,7,8]},
+  {group:"World",name:"Egyptian Suspended",intervals:[0,2,5,7,10]},
+  {group:"World",name:"Enigmatic",intervals:[0,1,4,6,8,10,11]},
+  {group:"World",name:"Neapolitan Major",intervals:[0,1,3,5,7,9,11]},
+  {group:"World",name:"Neapolitan Minor",intervals:[0,1,3,5,7,8,11]},
+  {group:"World",name:"Romanian Minor",intervals:[0,2,3,6,7,9,10]},
+];
+
+let currentRoot="C", currentScaleIdx=0, currentOctave=4, currentWave="sine", portamento=0.08;
+
+// ── Red colour tracker ────────────────────────────────────────
+// HSV thresholds — tuned for bright red
+let redConfig = { hLo:0, hHi:15, hLo2:165, hHi2:180, sLo:120, vLo:80 };
+// Smoothed finger position
+let finger = { x: -1, y: -1, visible: false };
+let fingerSmooth = { x: W/2, y: H/2 };
+let lostFrames = 0;
+const LOST_THRESH = 12; // frames before considered lost
+
+function rgb2hsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+  let h=0,s=max===0?0:d/max,v=max;
+  if(d!==0){
+    if(max===r) h=((g-b)/d)%6;
+    else if(max===g) h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h=Math.round(h*60); if(h<0)h+=360;
+  }
+  return [h, s*255, v*255];
+}
+
+function findRedBlob(imageData){
+  const d=imageData.data;
+  let count=0, sx=0, sy=0;
+  // Also track bounding box for blob size
+  let minX=W,maxX=0,minY=H,maxY=0;
+  for(let py=0;py<H;py+=2){
+    for(let px=0;px<W;px+=2){
+      const i=(py*W+px)*4;
+      const [h,s,v]=rgb2hsv(d[i],d[i+1],d[i+2]);
+      const isRed=(h<=redConfig.hHi||h>=redConfig.hLo2) && s>=redConfig.sLo && v>=redConfig.vLo;
+      if(isRed){
+        count++; sx+=px; sy+=py;
+        if(px<minX)minX=px; if(px>maxX)maxX=px;
+        if(py<minY)minY=py; if(py>maxY)maxY=py;
+      }
+    }
+  }
+  if(count<8) return null; // too few pixels, noise
+  return { x: sx/count, y: sy/count, count, minX, maxX, minY, maxY };
+}
+
+// ── Scale helpers ─────────────────────────────────────────────
+function getScaleNotes(root, scaleIdx, octave){
+  const ri=ROOTS.indexOf(root);
+  return SCALES[scaleIdx].intervals.map(iv=>{
+    const ni=(ri+iv)%12;
+    const oc=octave+Math.floor((ri+iv)/12);
+    return {name:CHROMATIC[ni],octave:oc,freq:Tone.Frequency(`${CHROMATIC[ni]}${oc}`).toFrequency()};
+  });
+}
+
+// x: 0=left=root note, 1=right=root note + 1 octave
+function getFreqFromX(x){
+  const notes=getScaleNotes(currentRoot,currentScaleIdx,currentOctave);
+  const topNote={...notes[0],octave:notes[0].octave+1,freq:notes[0].freq*2};
+  const all=[...notes,topNote];
+  const idx=Math.max(0,Math.min(x*(all.length-1), all.length-1));
+  const lo=Math.floor(idx), hi=Math.ceil(idx), t=idx-lo;
+  const flo=all[Math.min(lo,all.length-1)].freq;
+  const fhi=all[Math.min(hi,all.length-1)].freq;
+  return {freq:flo+(fhi-flo)*t, noteObj:all[Math.round(idx)]};
+}
+
+// ── Build UI ──────────────────────────────────────────────────
+const rootContainer=document.getElementById("root-btns");
+ROOTS.forEach(r=>{
+  const b=document.createElement("button");
+  b.className="root-btn"+(r==="C"?" active":"");
+  b.textContent=r;
+  b.onclick=()=>{
+    currentRoot=r;
+    document.querySelectorAll(".root-btn").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    updateScaleDisplay();
+  };
+  rootContainer.appendChild(b);
+});
+
+const scaleSel=document.getElementById("scale-select");
+let lastGroup="";
+SCALES.forEach((s,i)=>{
+  if(s.group!==lastGroup){
+    const og=document.createElement("optgroup"); og.label="── "+s.group+" ──";
+    scaleSel.appendChild(og); lastGroup=s.group;
+  }
+  const opt=document.createElement("option"); opt.value=i; opt.textContent=s.name;
+  scaleSel.appendChild(opt);
+});
+scaleSel.onchange=()=>{currentScaleIdx=+scaleSel.value; updateScaleDisplay();};
+
+function updateScaleDisplay(){
+  const notes=getScaleNotes(currentRoot,currentScaleIdx,currentOctave);
+  document.getElementById("scale-notes-display").textContent=notes.map(n=>n.name).join("  •  ");
+  document.getElementById("hud-scale").textContent=SCALES[currentScaleIdx].name.split(" ")[0].toUpperCase();
+  buildPitchRuler();
+}
+
+function buildPitchRuler(){
+  const ruler=document.getElementById("pitch-ruler"); ruler.innerHTML="";
+  const notes=getScaleNotes(currentRoot,currentScaleIdx,currentOctave);
+  const topNote={...notes[0],octave:notes[0].octave+1};
+  [...notes,topNote].reverse().forEach(n=>{
+    const d=document.createElement("div"); d.className="ruler-note";
+    d.textContent=n.name+n.octave; ruler.appendChild(d);
+  });
+}
+["MAX","75","50","25","OFF"].forEach(v=>{
+  const d=document.createElement("div"); d.className="vol-mark"; d.textContent=v;
+  document.getElementById("vol-ruler").appendChild(d);
+});
+
+document.querySelectorAll("[data-oct]").forEach(b=>b.onclick=()=>{
+  currentOctave=+b.dataset.oct;
+  document.querySelectorAll("[data-oct]").forEach(x=>x.classList.remove("active")); b.classList.add("active");
+  document.getElementById("hud-oct").textContent=currentOctave; updateScaleDisplay();
+});
+document.querySelectorAll("[data-wave]").forEach(b=>b.onclick=()=>{
+  currentWave=b.dataset.wave;
+  document.querySelectorAll("[data-wave]").forEach(x=>x.classList.remove("active")); b.classList.add("active");
+  if(synth) synth.set({oscillator:{type:currentWave}});
+});
+document.getElementById("port-slider").oninput=function(){
+  portamento=this.value/1000;
+  document.getElementById("port-val").textContent=this.value+"ms";
+  if(synth) synth.set({portamento});
+};
+document.getElementById("calib-btn").onclick=()=>{
+  // Reset smooth position to force re-acquisition
+  finger={x:-1,y:-1,visible:false}; lostFrames=LOST_THRESH+1;
+};
+
+updateScaleDisplay();
+
+// ── Particles ─────────────────────────────────────────────────
+const particles=[];
+function spawnParticles(x,y,vx,vy,hue,count,speed){
+  for(let i=0;i<count;i++){
+    const a=Math.atan2(vy,vx)+Math.random()*.8-.4;
+    const v=0.5+Math.random()*speed*5;
+    particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1,hue:hue+Math.random()*30-15,size:1.5+Math.random()*4,trail:[]});
+  }
+}
+function tickParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.trail.push({x:p.x,y:p.y});
+    if(p.trail.length>10)p.trail.shift();
+    p.x+=p.vx; p.y+=p.vy; p.vx*=0.93; p.vy*=0.93; p.life-=0.022;
+    if(p.life<=0)particles.splice(i,1);
+  }
+}
+function drawParticles(){
+  particles.forEach(p=>{
+    p.trail.forEach((t,ti)=>{
+      ctx.beginPath(); ctx.arc(t.x,t.y,p.size*(ti/p.trail.length),0,Math.PI*2);
+      ctx.fillStyle=`hsla(${p.hue},100%,65%,${p.life*(ti/p.trail.length)*.5})`; ctx.fill();
+    });
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+    ctx.fillStyle=`hsla(${p.hue},100%,72%,${p.life})`; ctx.fill();
+  });
+}
+
+// ── Audio ─────────────────────────────────────────────────────
+let synth, reverb, vibrato, masterVol;
+async function setupAudio(){
+  await Tone.start();
+  masterVol=new Tone.Volume(6).toDestination(); // boosted master
+  reverb=new Tone.Reverb({decay:2.5,wet:0.22}).connect(masterVol);
+  vibrato=new Tone.Vibrato({frequency:5,depth:0.08,wet:0.25}).connect(reverb);
+  synth=new Tone.Synth({
+    oscillator:{type:currentWave},
+    envelope:{attack:0.04,decay:0.1,sustain:1,release:0.25},
+    portamento,
+    volume:0,
+  }).connect(vibrato);
+}
+
+// ── Camera & canvas ───────────────────────────────────────────
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d",{willReadFrequently:true});
+const video=document.getElementById("video");
+
+function setupCamera(){
+  return new Promise((res,rej)=>{
+    navigator.mediaDevices.getUserMedia({video:{width:W,height:H,facingMode:"user"}})
+      .then(stream=>{
+        video.srcObject=stream;
+        video.onloadedmetadata=()=>video.play().then(()=>setTimeout(res,300)).catch(rej);
+      }).catch(rej);
+  });
+}
+
+// ── Main loop ─────────────────────────────────────────────────
+let animId, isRunning=false, playing=false;
+let prevFx=W/2, prevFy=H/2;
+
+function loop(){
+  if(video.videoWidth===0){if(isRunning)animId=requestAnimationFrame(loop);return;}
+
+  // Draw mirrored video
+  ctx.save(); ctx.scale(-1,1); ctx.drawImage(video,-W,0,W,H); ctx.restore();
+
+  // Find red blob
+  const imgData=ctx.getImageData(0,0,W,H);
+  const blob=findRedBlob(imgData);
+
+  const statusEl=document.getElementById("track-status");
+
+  if(blob){
+    lostFrames=0;
+    finger.visible=true;
+    // smooth position
+    fingerSmooth.x=fingerSmooth.x*.55+blob.x*.45;
+    fingerSmooth.y=fingerSmooth.y*.55+blob.y*.45;
+
+    // velocity for particles
+    const vx=fingerSmooth.x-prevFx, vy=fingerSmooth.y-prevFy;
+    const speed=Math.sqrt(vx*vx+vy*vy);
+    prevFx=fingerSmooth.x; prevFy=fingerSmooth.y;
+
+    // x: LEFT=root, RIGHT=+octave  (mirrored already handled by ctx.scale above)
+    const normX=fingerSmooth.x/W;
+    // y: TOP=loud, BOTTOM=silent
+    const normY=fingerSmooth.y/H;
+    const volFrac=Math.max(0,1-normY);
+    const volumeDb=-55+volFrac*52; // -55dB to -3dB
+
+    const {freq,noteObj}=getFreqFromX(normX);
+
+    // Audio
+    if(!playing){try{synth.triggerAttack(freq);}catch{}playing=true;}
+    else{try{synth.setNote(freq,Tone.now());}catch{}}
+    synth.volume.rampTo(volumeDb,.04);
+
+    // Draw overlay
+    drawSceneOverlay(fingerSmooth.x, fingerSmooth.y, normX, volFrac, blob, noteObj, freq);
+
+    // Particles — trailing behind finger movement
+    if(speed>1){
+      spawnParticles(fingerSmooth.x,fingerSmooth.y,vx,vy, normX*260+60, Math.floor(speed*.8+1), speed*.04);
+    }
+    if(speed>12) spawnParticles(fingerSmooth.x,fingerSmooth.y,vx,vy,normX*260+60,18,speed*.05);
+
+    statusEl.textContent="● TRACKING"; statusEl.className="track-status found";
+    document.getElementById("hud-freq").textContent=Math.round(freq)+"Hz";
+    document.getElementById("hud-vol").textContent=Math.round(volFrac*100)+"%";
+    document.getElementById("note-big").textContent=noteObj?noteObj.name+noteObj.octave:"—";
+  } else {
+    lostFrames++;
+    if(lostFrames>=LOST_THRESH){
+      if(playing){try{synth.triggerRelease();}catch{}playing=false;}
+      finger.visible=false;
+      statusEl.textContent="● SEARCHING…"; statusEl.className="track-status lost";
+      document.getElementById("note-big").textContent="—";
+    }
+    // Still draw particles fading out
+    drawSceneOverlay(fingerSmooth.x,fingerSmooth.y,fingerSmooth.x/W,0,null,null,0);
+  }
+
+  tickParticles();
+  drawParticles();
+  if(isRunning)animId=requestAnimationFrame(loop);
+}
+
+function drawSceneOverlay(fx,fy,normX,volFrac,blob,noteObj,freq){
+  const hue=normX*260+60;
+
+  // Crosshair lines
+  ctx.setLineDash([3,5]);
+  ctx.strokeStyle=`rgba(167,139,250,0.2)`; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(fx,0); ctx.lineTo(fx,H); ctx.stroke();
+  ctx.strokeStyle=`rgba(52,211,153,0.2)`;
+  ctx.beginPath(); ctx.moveTo(0,fy); ctx.lineTo(W,fy); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Scale column guides
+  const notes=getScaleNotes(currentRoot,currentScaleIdx,currentOctave);
+  const cols=notes.length+1;
+  ctx.strokeStyle="rgba(255,255,255,0.04)"; ctx.lineWidth=1;
+  for(let ci=0;ci<=cols;ci++){
+    const gx=ci/cols*W; ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke();
+  }
+  for(let ri=0;ri<=4;ri++){
+    const gy=ri/4*H; ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke();
+  }
+
+  if(blob){
+    // Red blob highlight ring
+    const bw=blob.maxX-blob.minX, bh=blob.maxY-blob.minY;
+    const br=Math.max(bw,bh)*0.7+10;
+    ctx.beginPath(); ctx.arc(fx,fy,br,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(239,68,68,0.8)`; ctx.lineWidth=2; ctx.stroke();
+
+    // Outer glow
+    const r=br+10+volFrac*40;
+    const grd=ctx.createRadialGradient(fx,fy,br*.5,fx,fy,r);
+    grd.addColorStop(0,`hsla(${hue},100%,70%,${0.3+volFrac*.4})`);
+    grd.addColorStop(1,`hsla(${hue},100%,40%,0)`);
+    ctx.beginPath(); ctx.arc(fx,fy,r,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
+
+    // Pulsing ring
+    const pulse=r+Math.sin(Date.now()*.008)*6;
+    ctx.beginPath(); ctx.arc(fx,fy,pulse,0,Math.PI*2);
+    ctx.strokeStyle=`hsla(${hue},100%,80%,${0.15+volFrac*.25})`;
+    ctx.lineWidth=1.5; ctx.stroke();
+
+    // Note label
+    if(noteObj){
+      ctx.font="bold 16px monospace";
+      ctx.fillStyle=`hsla(${hue},100%,92%,0.95)`;
+      const lx=Math.min(fx+pulse+8, W-56);
+      const ly=Math.max(fy-pulse-8, 18);
+      ctx.fillText(noteObj.name+noteObj.octave, lx, ly);
+    }
+  }
+}
+
+// ── Screens ───────────────────────────────────────────────────
+function show(name){
+  ["start","loading","error","running"].forEach(s=>
+    document.getElementById(s+"-screen").classList.toggle("hidden",s!==name)
+  );
+}
+document.getElementById("btn-start").onclick=async()=>{
+  show("loading");
+  try{
+    await setupAudio();
+    await setupCamera();
+    show("running");
+    isRunning=true;
+    animId=requestAnimationFrame(loop);
+  }catch(e){
+    document.getElementById("error-msg").textContent=
+      e.name==="NotAllowedError"?"Camera permission denied. Please allow camera access and try again.":
+      e.name==="NotFoundError"?"No camera found. Please connect a webcam and try again.":
+      "Error: "+e.message;
+    show("error");
+  }
+};
+document.getElementById("btn-retry").onclick=()=>show("start");
+</script>
+</body>
+</html>
